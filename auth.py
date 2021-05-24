@@ -28,44 +28,41 @@ def check_token(func):
 
 @app.route('/', methods=['GET'])
 def path():
-    return render_template('Login.html')
+    return render_template('login.html')
 
     
 
-@app.route("/login/", methods=['GET'])
+@app.route("/login", methods=['POST'])
 def login():
-    if request.method == 'GET':
-        username = request.args.get('username')
-        passwd = request.args.get('password')
-        print(username)
-        print(passwd)
-        if username != '' and passwd != '':
-            headers = {
-                "typ": "JWT",
-                "alg": "HS256"
-            }
-            payloads = {
-                "username": username
-            }
-            try:
-                conn = sqlite3.connect('proj.db')
-                db = conn.cursor()
-                data = db.execute("SELECT password, salt FROM users WHERE username = ?", (username,)).fetchall()
-                print(data)
-                hash_passwd = hashlib.pbkdf2_hmac('sha256', passwd.encode('UTF-8'), data[0][1], 100000)  
-                if data[0][0] is not None and data[0][0] == hash_passwd:
-                    token = jwt.encode(payload=payloads, key=secret_key, algorithm="HS256", headers=headers)
-                    res = make_response(jsonify({"token": token}))
-                    res.set_cookie(key='token', value=token)
-                else:
-                    return jsonify({"message": "Неверное имя пользователя или пароль"})
-            except:
-                return jsonify({"message": f"Пользователя с именем {username} не существует"})
-            finally:
-                conn.close()
-        else:
-            return jsonify({"message": "Введите имя пользователя и пароль"})
-        return res
+    if request.method == 'POST':
+        username = request.form.get('username')## менять на строчку reauest.form.get...
+        passwd = request.form.get('password')
+        headers = {
+            "typ": "JWT",
+            "alg": "HS256"
+        }
+        payloads = {
+            "username": username
+        }
+        try:
+            conn = sqlite3.connect('proj.db')
+            db = conn.cursor()
+            data = db.execute("SELECT password, salt FROM users WHERE username = ?", (username,)).fetchall()
+            print(data)
+            hash_passwd = hashlib.pbkdf2_hmac('sha256', passwd.encode('UTF-8'), data[0][1], 100000)  
+            if data[0][0] is not None and data[0][0] == hash_passwd:
+                token = jwt.encode(payload=payloads, key=secret_key, algorithm="HS256", headers=headers)
+                res = make_response(redirect(domen_name+'auth'))
+                res.set_cookie(key='token', value=token)
+            else:
+                return jsonify({"message": "Неверное имя пользователя или пароль"})
+        except:
+            return jsonify({"message": f"Пользователя с именем {username} не существует"})
+        finally:
+            conn.close()
+    else:
+        return jsonify({"message": "Введите имя пользователя и пароль"})
+    return res
 
 @app.route("/register", methods=['POST'])
 def register():
@@ -101,28 +98,16 @@ def register():
         return res
 
 
-@app.route("/auth", methods=['GET', 'POST', 'DELETE', 'PATCH'])
+@app.route("/auth", methods=['GET', 'POST'])
 @check_token
 def auth():
     if request.method == 'POST':
-        long_link = request.args.get('long_link')
-        short_link = request.args.get('short_link')
+        long_link = request.form.get('long_link')
+        short_link = request.form.get('short_link')
         token = request.cookies.get('token')
-        print(token)
-        link_status = request.args.get('link_status')
-        marker = True
-        while marker == True:
-            try:
-                conn = sqlite3.connect('proj.db')
-                db = conn.cursor()
-                short_link = make_short_link()
-                link = db.execute('SELECT short_link FROM link WHERE short_link = ?', (short_link,)).fetchone()
-                if link is None:
-                    marker = False
-            except:
-                return jsonify({'message': 'Что-то пошло не так 1 !'})
-            finally:
-                conn.close()
+        link_status = request.form.get('link_status')
+        if short_link == "":
+            short_link = make_short_link()
         try:
             conn = sqlite3.connect('proj.db')
             db = conn.cursor()
@@ -136,7 +121,7 @@ def auth():
             else:
                 db.execute('INSERT INTO link(long_link, short_link, user_id, link_status) VALUES(?, ?, ?, ?)', (long_link, short_link, user_id, link_status))
                 conn.commit()
-                message = jsonify({long_link: domen_name+short_link})
+                message = redirect(domen_name+'auth')#jsonify({long_link: domen_name+short_link})
         except:
             return jsonify({"message": "Что-то пошло не так 2 !"})
         finally:
@@ -150,16 +135,20 @@ def auth():
             conn = sqlite3.connect('proj.db')
             db = conn.cursor()
             user_id = db.execute('SELECT user_id FROM users WHERE username = ?', (username['username'],)).fetchone()[0]
-            data = db.execute("SELECT long_link, short_link, count_redirect FROM link WHERE user_id = ?", (user_id,)).fetchall()
+            data = db.execute("SELECT long_link, short_link, link_status, count_redirect, link_id FROM link WHERE user_id = ?", (user_id,)).fetchall()
+            print(data)
             conn.close()
         except:
             return jsonify({"message": "Что-то пошло не так"})
-        return jsonify(data)
+        return render_template('userplace.html', data=data)#jsonify(data)
 
-    if request.method == "DELETE":
+@app.route("/removelink", methods=['POST'])
+@check_token
+def remove_link():
+    if request.method == "POST":
         token = request.cookies.get('token')
         username = jwt.decode(token, secret_key, "HS256")
-        link_id = request.args.get('del_link')# Со страницы хтмл взять тот линк, что будет удален
+        link_id = request.form.get('del_link_id')# Со страницы хтмл взять тот линк, что будет удален
         try:
             conn = sqlite3.connect('proj.db')
             db = conn.cursor()
@@ -173,44 +162,68 @@ def auth():
             conn.close()
         except:
             return jsonify({"message": "Что-то пошло не так"})
-        return jsonify({f"{link_id}": "Ссылка удалена"})
+        return redirect(domen_name+'auth', code=302)#jsonify({f"{link_id}": "Ссылка удалена"})
 
-    if request.method == 'PATCH':
+@app.route("/updatelink", methods=['POST'])
+@check_token
+def update_link():
+    if request.method == 'POST':
         token = request.cookies.get('token')
         username = jwt.decode(token, secret_key, "HS256")
-        link_id = request.args.get('link_id')## адаптировать под шаблон
-        long_link = request.args.get('long_link')## адаптировать под шаблон
-        short_link = request.args.get('short_name')## адаптировать под шаблон
-        link_status = request.args.get('link_status')## адаптировать под шаблон
+        link_id = request.form.get('link_id')
+        long_link = request.form.get('long_link')
+        short_link = request.form.get('short_link')
+        generate_link = request.form.get('generate_link')
+        print(generate_link)
+        print(type(generate_link))
+        link_status = request.form.get('link_status')## адаптировать под шаблон
+        print(link_id)
+        print(long_link)
+        print(short_link)
+        print(link_status)
         try:
             conn = sqlite3.connect('proj.db')
             db = conn.cursor()
             user_id = db.execute('SELECT user_id FROM users WHERE username = ?', (username['username'],)).fetchone()[0]
             link_user_id = db.execute('SELECT user_id FROM link WHERE link_id = ?', (link_id,)).fetchone()[0]
             if link_user_id == user_id:
-                db.execute('UPDATE link SET long_link = ?, short_link = ?, link_status = ? WHERE link_id = ? AND user_id = ?', (long_link, short_link, link_status, link_id, user_id))
+                if short_link == "" and generate_link == None:
+                    db.execute('UPDATE link SET long_link = ?, link_status = ? WHERE link_id = ? AND user_id = ?', (long_link, link_status, link_id, user_id))
+                elif short_link != "" and generate_link != None:
+                    db.execute('UPDATE link SET long_link = ?, short_link = ?, link_status = ? WHERE link_id = ? AND user_id = ?', (long_link, short_link, link_status, link_id, user_id))
+                elif short_link != "" and generate_link == None:
+                    db.execute('UPDATE link SET long_link = ?, short_link = ?, link_status = ? WHERE link_id = ? AND user_id = ?', (long_link, short_link, link_status, link_id, user_id))
+                elif short_link == "" and generate_link != None:
+                    short_link = make_short_link()
+                    db.execute('UPDATE link SET long_link = ?, short_link = ?, link_status = ? WHERE link_id = ? AND user_id = ?', (long_link, short_link, link_status, link_id, user_id))
                 conn.commit()
-                return jsonify(long_link, short_link, link_status, link_id, user_id)## адаптировать под шаблон
+                return redirect(domen_name+'auth')#jsonify(long_link, short_link, link_status, link_id, user_id)## адаптировать под шаблон
             else:
                 return jsonify({"message": "Вы не являетесь владельцем этой короткой ссылки"})
         except:
             return jsonify({"message": "Что-то пошло не так"})
+
 # Для обновления уже существующей ссылки. По факту переход на страничку для редактирования
-@app.route('/update_link', methods=['GET'])
+@app.route('/show_link', methods=['POST'])
 @check_token
-def update_link():
+def show_link():
     token = request.cookies.get('token')
-    link_id = request.args.get('link_id')
+    link_id = request.form.get('patch_link_id')
+    print(link_id)
     username = jwt.decode(token, secret_key, 'HS256')
     try:
         conn = sqlite3.connect('proj.db')
         db = conn.cursor()
         user_id = db.execute('SELECT user_id FROM users WHERE username = ?', (username['username'],)).fetchone()[0]
+        print(user_id)
         link_user_id = db.execute('SELECT user_id FROM link WHERE link_id = ?', (link_id,)).fetchone()[0]
+        print(link_user_id)
         if link_user_id == user_id:
-            return jsonify(link_id)# адаптировать под шаблон
+            data = db.execute('SELECT long_link, short_link, link_status, link_id FROM link WHERE link_id = ?', (link_id,)).fetchone()
+            print(data)
+            return render_template('make_link.html', data=data)# адаптировать под шаблон
     except:
-        return jsonify({"message": "Эта короткая ссылка вам не принадлежит"})# адаптировать под шаблон
+        return jsonify({"message": "Error"})# адаптировать под шаблон
 
 
 
@@ -263,13 +276,25 @@ def link(short_link):
         return jsonify({"message": "Что-то пошло не так 2!"})
     
 
-
 def make_short_link():
-    arr_link = []
-    alphavit = ('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
-    count = random.randint(8, 12)
-    [arr_link.append(random.choice(alphavit)) for i in range(count)]
-    short_link = ''.join(arr_link)
+    marker = True
+    while marker == True:
+        try:
+            conn = sqlite3.connect('proj.db')
+            db = conn.cursor()
+            arr_link = []
+            alphavit = ('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
+            count = random.randint(8, 12)
+            [arr_link.append(random.choice(alphavit)) for i in range(count)]
+            short_link = ''.join(arr_link)
+            link = db.execute('SELECT short_link FROM link WHERE short_link = ?', (short_link,)).fetchone()
+            if link is None:
+                marker = False
+        except:
+            return jsonify({'message': 'Что-то пошло не так 1 !'})
+        finally:
+            conn.close()
+    
     return short_link
 
 def red_count(link_id):

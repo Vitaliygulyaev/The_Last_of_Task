@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Short Link Maker</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.2/css/bulma.min.css" />
+</head>
+
+<body>
+    <form name="new_link" action="auth" method="POST">
+        <p><b>Оригинальная ссылка:</b><br>
+            <input type="text" name="long_link">
+        <p><b>Читаемая ссылка:</b><br>
+            <input type="text" name="short_link">Вы можете указать человекочитаемую ссылку для удобства (не обязательно)<Br>
+        <p><b>Статус:</b><br>
+            <input type="radio" name="link_status" value="public">Публичная (доступна всем)<Br>
+            <input type="radio" name="link_status" value="general">Общего доступа (доступна только авторизованным пользователям)<Br>
+            <input type="radio" name="link_status" value="private">Приватная (дотспуна только владельцу)<Br>
+            <button type="submit">Создать</button>
+    </form>
+    <table>
+        <tr><th>Оригинальная ссылка</th><th>Короткая ссылка</th><th>Статус</th><th>Количество переходов</th></tr> <!--ряд с ячейками заголовков-->
+        {% for row in data %}
+        <tr><td>{{row[0]}}</td><td><a href="{{row[1]}}">{{row[1]}}</a></td><td>{{row[2]}}</td><td>{{row[3]}}</td>
+            <td>
+                <form method="POST" action="show_link">
+                    <button type='submit' name="patch_link_id" value="{{row[4]}}" size="20">Редактировать</button> <!--ряд с ячейками тела таблицы-->
+                </form>
+            </td>
+            <td> 
+                <form method="POST" action='removelink'>
+                    <button type='submit' name="del_link_id" value="{{row[4]}}" size="20">Удалить</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+</body>
+
+</html>
