@@ -231,8 +231,8 @@ def link(short_link):
                     return redirect(long_link, code=302)
                 elif link_status == 2:
                     lnk = Link.query.filter_by(short_link=short_link, users_id=user_id).first()
-                    link_user_id = lnk.users_id
-                    if link_user_id == user_id:
+                    if lnk is not None:
+                        link_user_id = lnk.users_id
                         link_id = lnk.id
                         longlink_id = lnk.longlink_id
                         lnglnk = longlink.query.filter_by(id=longlink_id).first()
